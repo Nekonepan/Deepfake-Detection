@@ -1,0 +1,45 @@
+# ============================================================
+# Konfigurasi Default - Sistem Deteksi Deepfake
+# ============================================================
+# File ini berisi pengaturan default untuk pelatihan,
+# evaluasi, dan prediksi model CNN deteksi deepfake.
+# ============================================================
+
+# --- Konfigurasi Model ---
+model:
+  name: DeepfakeCNN                # Nama arsitektur model
+  num_classes: 2                   # Jumlah kelas (real, fake)
+  input_size: 224                  # Ukuran input gambar (pixel)
+  dropout_rate: 0.5                # Tingkat dropout untuk regularisasi
+
+# --- Konfigurasi Pelatihan ---
+training:
+  batch_size: 32                   # Jumlah sampel per batch
+  num_epochs: 50                   # Jumlah epoch pelatihan
+  learning_rate: 0.001             # Laju pembelajaran awal
+  weight_decay: 0.0001             # Regularisasi L2
+  num_workers: 4                   # Jumlah worker untuk data loading
+  early_stopping_patience: 10     # Epoch tanpa perbaikan sebelum berhenti
+  scheduler_patience: 5           # Epoch sebelum mengurangi learning rate
+  scheduler_factor: 0.1           # Faktor pengurangan learning rate
+
+# --- Konfigurasi Data ---
+data:
+  train_split: 0.7                 # Proporsi data pelatihan (70%)
+  val_split: 0.15                  # Proporsi data validasi (15%)
+  test_split: 0.15                 # Proporsi data pengujian (15%)
+  image_size: 224                  # Ukuran gambar setelah resize
+  augmentation: true               # Aktifkan augmentasi data
+  normalize:                       # Nilai normalisasi ImageNet
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# --- Konfigurasi Path ---
+paths:
+  data_dir: data/                  # Direktori dataset
+  model_dir: models/               # Direktori penyimpanan model
+  results_dir: results/            # Direktori hasil evaluasi
+  log_dir: logs/                   # Direktori log pelatihan
+
+# --- Seed untuk Reproduktifitas ---
+seed: 42

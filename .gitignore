@@ -1,0 +1,113 @@
+# ============================================
+# .gitignore - Sistem Deteksi Deepfake
+# ============================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ---------- Virtual Environment ----------
+venv/
+env/
+.venv/
+.env
+ENV/
+
+# ---------- Model Files ----------
+*.pth
+*.pt
+*.h5
+*.onnx
+*.tflite
+*.pkl
+*.joblib
+*.weights
+
+# ---------- Dataset ----------
+data/train/
+data/val/
+data/test/
+data/raw/
+data/processed/
+data/sample/
+!data/.gitkeep
+
+# ---------- Hasil & Output ----------
+results/
+!results/.gitkeep
+outputs/
+predictions/
+exports/
+
+# ---------- Log ----------
+logs/
+!logs/.gitkeep
+*.log
+tensorboard_logs/
+runs/
+wandb/
+
+# ---------- Model Tersimpan ----------
+models/
+!models/.gitkeep
+checkpoints/
+saved_models/
+
+# ---------- IDE ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.bak
+*.orig
+
+# ---------- Jupyter Notebook ----------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---------- Coverage & Testing ----------
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ---------- Distribution ----------
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# ---------- Miscellaneous ----------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
