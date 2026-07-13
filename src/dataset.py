@@ -395,14 +395,20 @@ def get_data_loaders(
     )
 
     # Buat DataLoader untuk setiap dataset
-    # pin_memory=True mempercepat transfer data ke GPU
+    # pin_memory=True mempercepat transfer data ke GPU (hanya jika CUDA tersedia)
+    use_pin_memory = torch.cuda.is_available()
+
+    # drop_last=True hanya jika dataset lebih besar dari batch_size,
+    # agar tidak menghasilkan 0 batch pada dataset kecil
+    drop_last_train = len(train_dataset) > batch_size
+
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=batch_size,
         shuffle=True,           # Acak urutan data setiap epoch
         num_workers=num_workers,
-        pin_memory=True,
-        drop_last=True          # Buang batch terakhir jika tidak penuh
+        pin_memory=use_pin_memory,
+        drop_last=drop_last_train
     )
 
     val_loader = DataLoader(
@@ -410,7 +416,7 @@ def get_data_loaders(
         batch_size=batch_size,
         shuffle=False,          # Tidak perlu diacak untuk validasi
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
         drop_last=False
     )
 
@@ -419,7 +425,7 @@ def get_data_loaders(
         batch_size=batch_size,
         shuffle=False,          # Tidak perlu diacak untuk pengujian
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
         drop_last=False
     )
 

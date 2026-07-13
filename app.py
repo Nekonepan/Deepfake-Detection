@@ -78,6 +78,7 @@ def inject_custom_css():
         font-family: 'Inter', sans-serif;
     }
 
+
     /* ── Animated background ─────────────────────── */
     .stApp::before {
         content: '';
@@ -111,6 +112,24 @@ def inject_custom_css():
         backdrop-filter: blur(20px) !important;
         -webkit-backdrop-filter: blur(20px) !important;
         border-right: 1px solid rgba(108,99,255,0.15) !important;
+    }
+    /* ── Force Sidebar Always Visible & Hide Collapse Buttons ── */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
+    section[data-testid="stSidebar"] {
+        width: 280px !important;
+        min-width: 280px !important;
+        max-width: 280px !important;
+        transform: none !important;
+        visibility: visible !important;
+        display: block !important;
+    }
+    /* Ensure main page content aligns properly alongside the forced sidebar */
+    .stAppViewContainer {
+        display: flex !important;
+        flex-direction: row !important;
     }
     section[data-testid="stSidebar"] .stMarkdown p,
     section[data-testid="stSidebar"] .stMarkdown li,

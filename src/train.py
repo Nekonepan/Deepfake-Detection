@@ -222,6 +222,14 @@ class Trainer:
             })
 
         # Hitung rata-rata loss dan akurasi untuk seluruh epoch
+        if total == 0:
+            logger.warning(
+                f"Epoch {epoch}: Tidak ada data yang diproses. "
+                f"Periksa apakah dataset training terisi dan "
+                f"batch_size ({self.train_loader.batch_size}) tidak lebih besar dari jumlah data."
+            )
+            return 0.0, 0.0
+
         avg_loss = running_loss / total
         accuracy = 100.0 * correct / total
 
@@ -278,6 +286,13 @@ class Trainer:
             })
 
         # Hitung rata-rata loss dan akurasi
+        if total == 0:
+            logger.warning(
+                "Validasi: Tidak ada data yang diproses. "
+                "Periksa apakah dataset validasi terisi."
+            )
+            return 0.0, 0.0
+
         avg_loss = running_loss / total
         accuracy = 100.0 * correct / total
 
