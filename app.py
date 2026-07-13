@@ -826,18 +826,49 @@ def simulate_prediction(image: Image.Image) -> dict:
 
 def real_prediction(image: Image.Image) -> dict:
     """Prediksi menggunakan model terlatih."""
+    temp_path = None
+    grad_cam_path = None
     try:
         predictor = DeepfakePredictor(MODEL_PATH)
-        result = predictor.predict(image)
+        
+        # Save PIL Image to a temporary file because predict_with_gradcam expects a path
+        temp_dir = "temp"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, "temp_upload.png")
+        image.save(temp_path)
+        
+        # Path for saving Grad-CAM heatmap visualization
+        grad_cam_path = os.path.join(temp_dir, "temp_grad_cam.png")
+        
+        # Run prediction with Grad-CAM
+        label, confidence, _ = predictor.predict_with_gradcam(
+            image_path=temp_path,
+            save_path=grad_cam_path
+        )
+        
+        # Load the generated Grad-CAM visualization image fully into memory
+        grad_cam_img = None
+        if os.path.exists(grad_cam_path):
+            with Image.open(grad_cam_path) as img:
+                grad_cam_img = img.copy()
+            
         return {
-            "prediction": result.get("prediction", "UNKNOWN"),
-            "confidence": result.get("confidence", 0.0),
+            "prediction": label.upper(),  # Convert to uppercase (REAL/FAKE)
+            "confidence": confidence / 100.0,  # Convert percentage (0-100) to decimal (0-1)
             "is_simulation": False,
-            "grad_cam": result.get("grad_cam", None),
+            "grad_cam": grad_cam_img,
         }
     except Exception as e:
-        st.warning(f"Gagal memuat model: {e}")
+        st.warning(f"Gagal memuat model atau memproses gambar: {e}")
         return simulate_prediction(image)
+    finally:
+        # Clean up temp files
+        for path in (temp_path, grad_cam_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
 
 def page_deteksi() -> None:
