@@ -871,6 +871,127 @@ def real_prediction(image: Image.Image) -> dict:
                     pass
 
 
+def fourier_prediction(image: Image.Image) -> dict:
+    """Prediksi menggunakan Analisis Frekuensi Fourier (FFT) 2D."""
+    try:
+        import cv2
+        import matplotlib.pyplot as plt
+        import io
+        
+        # Convert ke grayscale
+        img_gray = np.array(image.convert('L'))
+        img_gray = cv2.resize(img_gray, (224, 224))
+        
+        # 2D Fast Fourier Transform
+        f = np.fft.fft2(img_gray)
+        fshift = np.fft.fftshift(f)
+        magnitude = np.abs(fshift)
+        
+        # Spektrum daya dalam skala logaritma untuk visualisasi
+        magnitude_log = 20 * np.log(magnitude + 1)
+        
+        # Normalisasi spektrum untuk analisis anomali
+        magnitude_norm = (magnitude - np.min(magnitude)) / (np.max(magnitude) - np.min(magnitude) + 1e-8)
+        
+        # Filter High-Pass: abaikan frekuensi rendah di tengah (radius 15)
+        h, w = magnitude_norm.shape
+        cy, cx = h // 2, w // 2
+        mask = np.ones((h, w), dtype=bool)
+        r = 15
+        mask[cy-r:cy+r, cx-r:cx+r] = False
+        
+        high_freq = magnitude_norm[mask]
+        
+        # Analisis outlier/lonjakan (peaks) frekuensi tinggi
+        # Generator AI sering meninggalkan jejak pola grid periodik
+        mean_val = np.mean(high_freq)
+        std_val = np.std(high_freq)
+        threshold = mean_val + 3.2 * std_val
+        peaks = np.sum(high_freq > threshold)
+        
+        # Hitung variansi (kehalusan spektrum)
+        var_val = np.var(high_freq)
+        
+        # Heuristik deteksi
+        is_fake = False
+        confidence = 50.0
+        
+        if peaks > 28:
+            is_fake = True
+            confidence = min(98.5, 75.0 + (peaks - 28) * 1.2)
+        elif var_val < 0.00012:
+            is_fake = True
+            confidence = min(96.0, 70.0 + (0.00012 - var_val) * 250000)
+        else:
+            is_fake = False
+            confidence = min(99.0, 75.0 + (var_val - 0.00012) * 400)
+            
+        label = "FAKE" if is_fake else "REAL"
+        
+        # Generate plot visualisasi Spektrum FFT
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(magnitude_log, cmap='jet')
+        ax.axis('off')
+        ax.set_title("Spektrum Frekuensi 2D (FFT)", fontsize=12, color='white', fontweight='bold')
+        fig.patch.set_facecolor('#1A1A2E')  # Samakan dengan warna kartu UI
+        plt.tight_layout()
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor=fig.get_facecolor())
+        plt.close()
+        buf.seek(0)
+        fft_viz = Image.open(buf).copy()
+        
+        return {
+            "prediction": label,
+            "confidence": confidence / 100.0,
+            "is_simulation": False,
+            "grad_cam": fft_viz,
+            "is_fft": True,
+            "peaks": int(peaks),
+            "variance": float(var_val)
+        }
+    except Exception as e:
+        st.warning(f"Gagal melakukan analisis FFT: {e}")
+        return simulate_prediction(image)
+
+
+def hybrid_prediction(image: Image.Image, model_exists: bool) -> dict:
+    """Prediksi gabungan CNN spasial dan FFT frekuensi."""
+    cnn_res = real_prediction(image)
+    fft_res = fourier_prediction(image)
+    
+    # Jika model CNN belum dilatih (simulasi), gunakan FFT sepenuhnya
+    if cnn_res.get("is_simulation") or not model_exists:
+        res = fft_res.copy()
+        res["is_hybrid_fallback"] = True
+        return res
+        
+    # Kombinasi bobot keputusan
+    cnn_score = 1.0 if cnn_res["prediction"] == "FAKE" else 0.0
+    fft_score = 1.0 if fft_res["prediction"] == "FAKE" else 0.0
+    
+    # Bobot: 60% FFT (sensitif anomali generator AI), 40% CNN (spasial)
+    score = 0.4 * (cnn_score * cnn_res["confidence"]) + 0.6 * (fft_score * fft_res["confidence"])
+    
+    if score > 0.5:
+        pred = "FAKE"
+        conf = score
+    else:
+        pred = "REAL"
+        conf = 1.0 - score
+        
+    return {
+        "prediction": pred,
+        "confidence": conf,
+        "is_simulation": False,
+        "grad_cam": fft_res["grad_cam"],  # Tetap tampilkan visualisasi FFT
+        "is_hybrid": True,
+        "cnn_pred": cnn_res["prediction"],
+        "fft_pred": fft_res["prediction"]
+    }
+
+
 def page_deteksi() -> None:
     """Menampilkan halaman deteksi deepfake."""
     st.markdown(
@@ -980,6 +1101,13 @@ def page_deteksi() -> None:
         )
 
         if uploaded_file is not None:
+            # Dropdown untuk memilih metode analisis
+            method = st.selectbox(
+                "Pilih Metode Analisis:",
+                ["Model CNN (Deep Learning)", "Analisis Frekuensi Fourier (FFT)", "Hybrid (CNN + FFT)"],
+                help="CNN mendeteksi ketidakcocokan spasial wajah. FFT mendeteksi sisa artefak garis/grid frekuensi tinggi yang diciptakan oleh AI generator (Midjourney, DALL-E, GAN, dll.). Hybrid menggabungkan keduanya."
+            )
+            
             analyze_btn = st.button(
                 "🔍  Analisis Gambar",
                 use_container_width=True,
@@ -991,12 +1119,27 @@ def page_deteksi() -> None:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
-                steps = [
-                    ("Memuat gambar...", 25),
-                    ("Preprocessing...", 50),
-                    ("Menganalisis dengan CNN...", 80),
-                    ("Menghasilkan prediksi...", 100),
-                ]
+                if "Fourier" in method:
+                    steps = [
+                        ("Memuat gambar...", 25),
+                        ("Menghitung 2D FFT...", 60),
+                        ("Menganalisis anomali frekuensi...", 90),
+                        ("Menghasilkan visualisasi...", 100),
+                    ]
+                elif "Hybrid" in method:
+                    steps = [
+                        ("Memuat gambar...", 20),
+                        ("Menganalisis dengan CNN...", 50),
+                        ("Menghitung 2D FFT...", 80),
+                        ("Menggabungkan hasil deteksi...", 100),
+                    ]
+                else:
+                    steps = [
+                        ("Memuat gambar...", 25),
+                        ("Preprocessing...", 50),
+                        ("Menganalisis dengan CNN...", 80),
+                        ("Menghasilkan prediksi...", 100),
+                    ]
 
                 for step_label, step_pct in steps:
                     status_text.markdown(
@@ -1006,18 +1149,24 @@ def page_deteksi() -> None:
                     )
                     # Animasi bertahap
                     current = progress_bar.empty() if False else None
-                    time.sleep(0.5 + random.uniform(0.1, 0.4))
+                    time.sleep(0.4 + random.uniform(0.1, 0.3))
                     progress_bar.progress(step_pct)
 
                 status_text.empty()
                 progress_bar.empty()
 
-                # Prediksi
+                # Prediksi berdasarkan metode yang dipilih
                 image = Image.open(uploaded_file).convert("RGB")
-                if model_exists and MODEL_AVAILABLE:
-                    result = real_prediction(image)
+                
+                if "Fourier" in method:
+                    result = fourier_prediction(image)
+                elif "Hybrid" in method:
+                    result = hybrid_prediction(image, model_exists and MODEL_AVAILABLE)
                 else:
-                    result = simulate_prediction(image)
+                    if model_exists and MODEL_AVAILABLE:
+                        result = real_prediction(image)
+                    else:
+                        result = simulate_prediction(image)
 
                 prediction = result["prediction"]
                 confidence = result["confidence"]
@@ -1069,10 +1218,19 @@ def page_deteksi() -> None:
                         unsafe_allow_html=True,
                     )
 
-                # Grad-CAM placeholder
+                # Visualisasi (Grad-CAM atau FFT)
                 render_divider()
+                is_fft_result = result.get("is_fft") or result.get("is_hybrid") or result.get("is_hybrid_fallback")
+                
+                if is_fft_result:
+                    title = "Analisis Spektrum Frekuensi (FFT 2D)"
+                    caption = "Spektrum Frekuensi FFT — Titik-titik cahaya outlier di luar pusat menunjukkan anomali pola grid kompresi AI."
+                else:
+                    title = "Grad-CAM Heatmap"
+                    caption = "Grad-CAM — Area Fokus Model Spasial"
+                    
                 st.markdown(
-                    '<h4><span class="gradient-text">Grad-CAM Heatmap</span></h4>',
+                    f'<h4><span class="gradient-text">{title}</span></h4>',
                     unsafe_allow_html=True,
                 )
 
@@ -1080,9 +1238,36 @@ def page_deteksi() -> None:
                 if grad_cam_data is not None:
                     st.image(
                         grad_cam_data,
-                        caption="Grad-CAM — Area Fokus Model",
+                        caption=caption,
                         use_container_width=True,
                     )
+                    
+                    # Tambahkan info detail forensik jika FFT digunakan
+                    if is_fft_result and "peaks" in result:
+                        st.markdown(
+                            f"""
+                            <div class="glass-card" style="padding:14px 20px; margin-top:10px;">
+                                <table style="width:100%; font-size:0.85rem;">
+                                    <tr>
+                                        <td style="color:var(--muted);">Grid Spikes/Peaks Terdeteksi</td>
+                                        <td style="color:var(--text); text-align:right; font-weight:bold;">
+                                            {result['peaks']}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color:var(--muted);">Variansi Spektrum (High-Freq)</td>
+                                        <td style="color:var(--text); text-align:right;">
+                                            {result['variance']:.6f}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color:var(--muted);">Tanda Tangan Forensik</td>
+                                        <td style="color:{"var(--danger)" if result['peaks'] > 28 or result['variance'] < 0.00012 else "var(--success)"}; text-align:right; font-weight:bold;">
+                                            {"ANOMALI (BUATAN AI)" if result['peaks'] > 28 or result['variance'] < 0.00012 else "NORMAL (FOTO ASLI)"}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                 else:
                     # Placeholder heatmap simulation
                     img_resized = image.resize((224, 224))
